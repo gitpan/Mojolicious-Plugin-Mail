@@ -12,7 +12,7 @@ use MIME::EncWords ();
 use constant TEST    => $ENV{MOJO_MAIL_TEST} || 0;
 use constant CHARSET => 'UTF-8';
 
-our $VERSION = '0.51';
+our $VERSION = '0.6';
 
 __PACKAGE__->attr(conf => sub { +{} });
 
@@ -24,8 +24,21 @@ sub register {
 	$app->renderer->add_helper(
 		mail => sub {
 			my $self = shift;
-			my $msg  = @_ ? $plugin->build( @_ ) : return;
+			my $args = @_ ? { @_ } : return;
 			
+			# simple interface
+			unless (exists $args->{mail}) {
+				$args->{mail}->{ $_->[1] } = delete $args->{ $_->[0] }
+					for grep { $args->{ $_->[0] } }
+						[to => 'To'], [from => 'From'], [cc => 'Cc'], [bcc => 'Bcc'], [subject => 'Subject'], [data => 'Data']
+				;
+			}
+			
+			# hidden data and subject
+			$args->{mail}->{Data   } ||= $self->helper('render_mail');
+			$args->{mail}->{Subject} ||= $self->stash ('subject');
+			
+			my $msg  = $plugin->build( %$args );
 			my $test = { @_ }->{test} || TEST;
 			$msg->send( $conf->{'how'}, @{$conf->{'howargs'}||[]} ) unless $test;
 			
@@ -94,11 +107,17 @@ sub build {
 	
 	my $msg = MIME::Lite->new( %$mail );
 	
+	# header
+	$msg->delete('X-Mailer'); # remove default MIME::Lite header
 	$msg->add   ( %$_ ) for @{$p->{headers} || []}; # XXX: add From|To|Cc|Bcc => ... (mimeword)
+	$msg->add   ('X-Mailer' => join ' ', 'Mojolicious',  $Mojolicious::VERSION, __PACKAGE__, $VERSION, '(Perl)')
+		unless $msg->get('X-Mailer') || $p->{nomailer};
 	
-	$msg->attr  ( %$_ ) for @{$p->{attr   } || []};
-	$msg->attr  ('content-type.charset' => $charset) if $charset;
+	# attr
+	$msg->attr( %$_ ) for @{$p->{attr   } || []};
+	$msg->attr('content-type.charset' => $charset) if $charset;
 	
+	# attach
 	$msg->attach( %$_ ) for
 		grep {
 			if (!$_->{Type} || $_->{Type} eq 'TEXT') {
@@ -110,8 +129,6 @@ sub build {
 		grep { $_->{Data} || $_->{Path} }
 		@{$p->{attach} || []}
 	;
-	
-	$msg->replace('X-Mailer' => join ' ', 'Mojolicious',  $Mojolicious::VERSION, __PACKAGE__, $VERSION, '(Perl)');
 	
 	return $msg;
 }
@@ -147,12 +164,24 @@ Mojolicious::Plugin::Mail - Mojolicious Plugin for send mail
 
   # in controller
   $self->helper('mail',
-    mail => {
-      To      => 'sharifulin@gmail.com',
-      Subject => 'Test',
-      Data    => 'use Perl or die;',
-    }
+    to      => 'sharifulin@gmail.com',
+    subject => 'Test'm
+    data    => 'use Perl or die;',
   );
+
+  # in controller (new version of Mojolicious)
+  $self->mail(
+    to      => 'sharifulin@gmail.com',
+    subject => 'Test',
+    data    => 'use Perl or die;',
+  );
+
+  # in controller, using render
+  $self->mail(to => 'sharifulin@gmail.com');
+
+  # template: controller/action.mail.ep
+  % stash subject => 'Test';
+  use Perl or die;
 
 
 =head1 DESCRIPTION
@@ -165,6 +194,19 @@ L<Mojolicious::Plugin::Mail> contains two helpers: I<mail> and I<render_mail>.
 
 =head2 C<mail>
 
+  # simple interface
+  $self->helper('mail',
+      to      => 'sharifulin@gmail.com',
+      from    => 'sharifulin@gmail.com',
+      
+      cc      => '..',
+      bcc     => '..',
+      
+      subject => 'Test',
+      data    => 'use Perl or die;',
+  );
+
+  # interface as MIME::Lite
   $self->helper('mail',
       # test mode
       test   => 1,
@@ -199,7 +241,31 @@ Build and send email, return mail as string.
 
 Supported parameters:
 
-=over 5
+=over 14
+
+=item * to
+
+Header 'To' of mail.
+
+=item * from
+
+Header 'From' of mail.
+
+=item * cc
+
+Header 'Cc' of mail.
+
+=item * bcc
+
+Header 'Bcc' of mail.
+
+=item * subject
+
+Header 'Subject' of mail.
+
+=item * data
+
+Content of mail
 
 =item * mail
 
@@ -221,11 +287,29 @@ Arrayref of hashref, hashref containts parameters as I<attr(ATTR, VALUE)>. See L
 
 Test mode, don't send mail.
 
+=item * charset
+
+Charset of mail, default charset is UTF-8.
+
+=item * mimeword
+
+Using mimeword or not, default value is 1.
+
+=item * nomailer
+
+No using 'X-Mailer' header of mail, default value is 1.
+
 =back
+
+If no subject, uses value of stash parameter 'subject'.
+
+If no data, call I<render_mail> helper with all stash parameters.
 
 =head2 C<render_mail>
 
   my $data = $self->helper('render_mail', 'user/signup');
+  # or
+  my $data = $self->render_mail('user/signup'); # new version of Mojolicious
 
   # or use stash params
   my $data = $self->helper('render_mail', template => 'user/signup', user => $user);
@@ -318,6 +402,18 @@ L<Mojolicious::Plugin::Mail> has test mode, no send mail.
   );
 
 =head1 EXAMPLES
+
+Simple interface for send mail using new version of Mojolicious:
+
+  get '/simple' => sub {
+    my $self = shift;
+    
+    $self->mail(
+      to      => 'sharifulin@gmail.com',
+      subject => 'Тест письмо',
+      data    => "<p>Привет!</p>",
+    );
+  };
 
 Simple send mail:
 
@@ -414,6 +510,15 @@ Multipart mixed mail:
     );
   };
 
+Render mail using simple interface and new Mojolicious version:
+
+  get '/render_simple' => sub {
+    my $self = shift;
+    my $mail = $self->mail(to => 'sharifulin@gmail.com');
+
+    $self->render(ok => 1, mail => $mail);
+} => 'render';
+
 Mail with render data and subject from stash param:
 
   get '/render' => sub {
@@ -438,7 +543,6 @@ Mail with render data and subject from stash param:
   % stash 'subject' => 'Привет render';
   
   <p>Привет mail render!</p>
-
 
 =head1 SEE ALSO
 
