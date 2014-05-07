@@ -4,7 +4,7 @@
       "Anatoly Sharifulin <sharifulin@gmail.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.3901, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "Module::Build version 0.4203",
    "keywords" : [
       "mojo",
       "mojolicious",
@@ -28,7 +28,7 @@
       },
       "configure" : {
          "requires" : {
-            "Module::Build" : "0.39"
+            "Module::Build" : "0.42"
          }
       },
       "runtime" : {
@@ -44,7 +44,7 @@
    "provides" : {
       "Mojolicious::Plugin::Mail" : {
          "file" : "lib/Mojolicious/Plugin/Mail.pm",
-         "version" : "1.1"
+         "version" : "1.2"
       }
    },
    "release_status" : "stable",
@@ -56,5 +56,5 @@
          "url" : "http://github.com/sharifulin/Mojolicious-Plugin-Mail"
       }
    },
-   "version" : "1.1"
+   "version" : "1.2"
 }
