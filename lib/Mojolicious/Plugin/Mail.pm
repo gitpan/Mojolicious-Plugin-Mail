@@ -10,7 +10,7 @@ use constant FROM     => 'test-mail-plugin@mojolicio.us';
 use constant CHARSET  => 'UTF-8';
 use constant ENCODING => 'base64';
 
-our $VERSION = '1.2';
+our $VERSION = '1.3';
 
 has conf => sub { +{} };
 
@@ -61,9 +61,9 @@ sub register {
 	$app->helper(
 		render_mail => sub {
 			my $self = shift;
-			my $data = $self->render(@_, format => 'mail', partial => 1);
+			my $data = $self->render_to_string(@_, format => 'mail');
 			
-			delete @{$self->stash}{ qw(partial cb format mojo.captures mojo.started mojo.content mojo.routed) };
+			# delete @{$self->stash}{ qw(cb format mojo.captures mojo.started mojo.content mojo.routed) };
 			$data;
 		},
 	);
